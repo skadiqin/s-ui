@@ -298,6 +298,13 @@ install_s-ui() {
     tar zxvf s-ui-linux-$(arch).tar.gz
     rm s-ui-linux-$(arch).tar.gz -f
 
+    echo -e "${yellow}正在更新汉化版管理脚本...${plain}"
+    wget -N --no-check-certificate -O s-ui/s-ui.sh https://raw.githubusercontent.com/skadiqin/s-ui/main/s-ui.sh
+    if [[ $? -ne 0 ]]; then
+        echo -e "${red}下载汉化版管理脚本失败，请确认服务器能够访问 Github ${plain}"
+        exit 1
+    fi
+
     chmod +x s-ui/sui s-ui/s-ui.sh
     cp s-ui/s-ui.sh /usr/bin/s-ui
     cp -rf s-ui /usr/local/
