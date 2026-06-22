@@ -221,16 +221,6 @@ ssl_cert_issue_IP() {
     fi
     echo -e "${yellow}[调试]${plain} 您的 IP 地址为：${serverIP}，正在检查..."
 
-    local currentCert=$(~/.acme.sh/acme.sh --list | tail -1 | awk '{print $1}')
-    if [[ "${currentCert}" == "${serverIP}" ]]; then
-        local certInfo=$(~/.acme.sh/acme.sh --list)
-        echo -e "${red}[错误]${plain} 系统中已存在该 IP 的证书，无法再次申请，当前证书详情："
-        echo -e "${green}[信息]${plain} $certInfo"
-        exit 1
-    else
-        echo -e "${green}[信息]${plain} 您的 IP 已准备好申请证书..."
-    fi
-
     certPath="/root/cert/${serverIP}"
     if [ ! -d "$certPath" ]; then
         mkdir -p "$certPath"
@@ -239,29 +229,41 @@ ssl_cert_issue_IP() {
         mkdir -p "$certPath"
     fi
 
-    local WebPort=80
-    read -p "请选择用于验证的端口，默认为 80 端口：" WebPort
-    if [[ ${WebPort} -gt 65535 || ${WebPort} -lt 1 ]]; then
-        echo -e "${red}[错误]${plain} 您输入的 ${WebPort} 无效，将使用默认端口 80"
-        WebPort=80
-    fi
-    echo -e "${green}[信息]${plain} 将使用端口：${WebPort} 申请证书，请确保该端口已开放..."
-
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-    if [ $? -ne 0 ]; then
-        echo -e "${red}[错误]${plain} 设置默认 CA Let's Encrypt 失败，退出..."
-        exit 1
-    fi
-
-    # 使用 short-lived 配置文件申请 6 天有效期的 IP 地址证书
-    ~/.acme.sh/acme.sh --issue -d ${serverIP} --standalone --httpport ${WebPort} \
-        --default-profile shortzl
-    if [ $? -ne 0 ]; then
-        echo -e "${red}[错误]${plain} 申请证书失败，请检查日志"
-        rm -rf ~/.acme.sh/${serverIP}
-        exit 1
+    local cert_exists=false
+    if ~/.acme.sh/acme.sh --list | awk '{print $1}' | grep -Fxq "${serverIP}"; then
+        local certInfo=$(~/.acme.sh/acme.sh --list)
+        echo -e "${green}[信息]${plain} 系统中已存在该 IP 的证书，将直接安装使用，当前证书详情："
+        echo -e "${green}[信息]${plain} $certInfo"
+        cert_exists=true
     else
-        echo -e "${green}[信息]${plain} 申请证书成功，正在安装证书..."
+        echo -e "${green}[信息]${plain} 您的 IP 已准备好申请证书..."
+    fi
+
+    if [[ "${cert_exists}" != "true" ]]; then
+        local WebPort=80
+        read -p "请选择用于验证的端口，默认为 80 端口：" WebPort
+        if [[ ${WebPort} -gt 65535 || ${WebPort} -lt 1 ]]; then
+            echo -e "${red}[错误]${plain} 您输入的 ${WebPort} 无效，将使用默认端口 80"
+            WebPort=80
+        fi
+        echo -e "${green}[信息]${plain} 将使用端口：${WebPort} 申请证书，请确保该端口已开放..."
+
+        ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+        if [ $? -ne 0 ]; then
+            echo -e "${red}[错误]${plain} 设置默认 CA Let's Encrypt 失败，退出..."
+            exit 1
+        fi
+
+        # 使用 short-lived 配置文件申请 6 天有效期的 IP 地址证书
+        ~/.acme.sh/acme.sh --issue -d ${serverIP} --standalone --httpport ${WebPort} \
+            --default-profile shortzl
+        if [ $? -ne 0 ]; then
+            echo -e "${red}[错误]${plain} 申请证书失败，请检查日志"
+            rm -rf ~/.acme.sh/${serverIP}
+            exit 1
+        else
+            echo -e "${green}[信息]${plain} 申请证书成功，正在安装证书..."
+        fi
     fi
 
     ~/.acme.sh/acme.sh --installcert -d ${serverIP} \
@@ -276,8 +278,10 @@ ssl_cert_issue_IP() {
         echo -e "${green}[信息]${plain} 安装证书成功，正在启用自动续期..."
     fi
 
-    # 将续期周期设为 5 天，确保 6 天有效期的证书能及时自动续期
-    ~/.acme.sh/acme.sh --renew -d ${serverIP} --force --days 5
+    # 新申请证书时设置续期周期为 5 天；已有证书时直接使用现有续期配置
+    if [[ "${cert_exists}" != "true" ]]; then
+        ~/.acme.sh/acme.sh --renew -d ${serverIP} --force --days 5
+    fi
     ~/.acme.sh/acme.sh --upgrade --auto-upgrade
     if [ $? -ne 0 ]; then
         echo -e "${red}[错误]${plain} 自动续期设置失败，证书详情："
