@@ -269,20 +269,20 @@ install_s-ui() {
     cd /tmp/
 
     if [ $# == 0 ]; then
-        last_version=$(curl -Ls "https://api.github.com/repos/skadiqin/s-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        last_version=$(curl -Ls "https://api.github.com/repos/alireza0/s-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         if [[ ! -n "$last_version" ]]; then
             echo -e "${red}获取 s-ui 版本失败，可能是由于 Github API 限制，请稍后重试${plain}"
             exit 1
         fi
         echo -e "已获取 s-ui 最新版本：${last_version}，开始安装..."
-        wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz https://github.com/skadiqin/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz
+        wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz
         if [[ $? -ne 0 ]]; then
             echo -e "${red}下载 s-ui 失败，请确认服务器能够访问 Github ${plain}"
             exit 1
         fi
     else
         last_version=$1
-        url="https://github.com/skadiqin/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
+        url="https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
         echo -e "开始安装 s-ui v$1"
         wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz ${url}
         if [[ $? -ne 0 ]]; then
