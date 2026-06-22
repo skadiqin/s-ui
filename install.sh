@@ -58,12 +58,53 @@ install_base() {
     esac
 }
 
+random_string() {
+    local length=${1:-8}
+    tr -dc 'A-Za-z0-9' </dev/urandom | head -c ${length}
+}
+
+random_port() {
+    shuf -i 20000-65535 -n 1
+}
+
 config_after_install() {
+    local is_fresh_install=false
+    if [[ ! -f "/usr/local/s-ui/db/s-ui.db" ]]; then
+        is_fresh_install=true
+    fi
+
     echo -e "${yellow}正在迁移数据... ${plain}"
     /usr/local/s-ui/sui migrate
 
-    echo -e "${yellow}安装/更新完成！出于安全考虑，建议修改面板设置 ${plain}"
-    read -p "是否继续修改 [y/n]：" config_confirm
+    if [[ "${is_fresh_install}" == "true" ]]; then
+        local config_port=$(random_port)
+        local config_subPort=$(random_port)
+        while [[ "${config_subPort}" == "${config_port}" ]]; do
+            config_subPort=$(random_port)
+        done
+        local config_path="/$(random_string 10)"
+        local config_subPath="/$(random_string 10)"
+        local usernameTemp="$(random_string 10)"
+        local passwordTemp="$(random_string 16)"
+
+        echo -e "${yellow}检测到全新安装，正在生成随机安全配置...${plain}"
+        /usr/local/s-ui/sui setting -port ${config_port} -path ${config_path} -subPort ${config_subPort} -subPath ${config_subPath}
+        /usr/local/s-ui/sui admin -username ${usernameTemp} -password ${passwordTemp}
+
+        echo -e "###############################################"
+        echo -e "${green}面板端口：${config_port}${plain}"
+        echo -e "${green}面板路径：${config_path}${plain}"
+        echo -e "${green}订阅端口：${config_subPort}${plain}"
+        echo -e "${green}订阅路径：${config_subPath}${plain}"
+        echo -e "${green}管理员用户名：${usernameTemp}${plain}"
+        echo -e "${green}管理员密码：${passwordTemp}${plain}"
+        echo -e "###############################################"
+        echo -e "${red}请务必保存以上随机登录信息；如果忘记，可输入 ${green}s-ui${red} 打开配置菜单重新设置${plain}"
+        return
+    fi
+
+    echo -e "${yellow}安装/更新完成！这是升级操作，将保留原有设置 ${plain}"
+    read -p "是否继续修改面板设置 [y/n]：" config_confirm
     if [[ "${config_confirm}" == "y" || "${config_confirm}" == "Y" ]]; then
         echo -e "请输入${yellow}面板端口${plain}（留空则保持现有/默认值）："
         read config_port
@@ -87,11 +128,9 @@ config_after_install() {
 
         read -p "是否修改管理员账号密码 [y/n]：" admin_confirm
         if [[ "${admin_confirm}" == "y" || "${admin_confirm}" == "Y" ]]; then
-            # First admin credentials
             read -p "请设置用户名：" config_account
             read -p "请设置密码：" config_password
 
-            # Set credentials
             echo -e "${yellow}正在初始化，请稍候...${plain}"
             /usr/local/s-ui/sui admin -username ${config_account} -password ${config_password}
         else
@@ -99,20 +138,7 @@ config_after_install() {
             /usr/local/s-ui/sui admin -show
         fi
     else
-        echo -e "${red}已取消...${plain}"
-        if [[ ! -f "/usr/local/s-ui/db/s-ui.db" ]]; then
-            local usernameTemp=$(head -c 6 /dev/urandom | base64)
-            local passwordTemp=$(head -c 6 /dev/urandom | base64)
-            echo -e "这是全新安装，出于安全考虑将生成随机登录信息："
-            echo -e "###############################################"
-            echo -e "${green}用户名：${usernameTemp}${plain}"
-            echo -e "${green}密码：${passwordTemp}${plain}"
-            echo -e "###############################################"
-            echo -e "${red}如果忘记登录信息，可输入 ${green}s-ui${red} 打开配置菜单${plain}"
-            /usr/local/s-ui/sui admin -username ${usernameTemp} -password ${passwordTemp}
-        else
-            echo -e "${red} 这是升级操作，将保留原有设置。如果忘记登录信息，可输入 ${green}s-ui${red} 打开配置菜单${plain}"
-        fi
+        echo -e "${red}已取消，将保留原有设置。如果忘记登录信息，可输入 ${green}s-ui${red} 打开配置菜单${plain}"
     fi
 }
 
