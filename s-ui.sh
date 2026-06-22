@@ -479,6 +479,44 @@ install_acme() {
     return 0
 }
 
+set_setting_value() {
+    local key=$1
+    local value=$2
+    local dbPath="/usr/local/s-ui/db/s-ui.db"
+    sqlite3 "${dbPath}" "UPDATE settings SET value='${value}' WHERE key='${key}'; INSERT INTO settings (key, value) SELECT '${key}', '${value}' WHERE NOT EXISTS (SELECT 1 FROM settings WHERE key='${key}');"
+}
+
+apply_ip_cert_to_panel() {
+    local serverIP=$1
+    local certFile="/root/cert/${serverIP}/fullchain.pem"
+    local keyFile="/root/cert/${serverIP}/privkey.pem"
+    local dbPath="/usr/local/s-ui/db/s-ui.db"
+
+    if [[ ! -f "${dbPath}" ]]; then
+        LOGE "未找到 s-ui 数据库：${dbPath}，无法自动应用证书"
+        return 1
+    fi
+    if [[ ! -f "${certFile}" || ! -f "${keyFile}" ]]; then
+        LOGE "未找到证书文件，无法自动应用证书"
+        return 1
+    fi
+    if ! command -v sqlite3 &>/dev/null; then
+        LOGE "未找到 sqlite3，无法自动写入面板证书配置"
+        return 1
+    fi
+
+    set_setting_value "webCertFile" "${certFile}"
+    set_setting_value "webKeyFile" "${keyFile}"
+    set_setting_value "subCertFile" "${certFile}"
+    set_setting_value "subKeyFile" "${keyFile}"
+
+    LOGI "已将证书应用到面板和订阅配置"
+    if [[ -f "/etc/systemd/system/s-ui.service" ]]; then
+        systemctl restart s-ui
+        LOGI "已重启 s-ui 服务，请使用 https:// 访问面板"
+    fi
+}
+
 ssl_cert_issue_main() {
     echo -e "${green}\t1.${plain} 申请 SSL 证书"
     echo -e "${green}\t2.${plain} 吊销证书"
@@ -731,16 +769,16 @@ ssl_cert_issue_IP() {
     fi
     case "${release}" in
     ubuntu | debian | armbian)
-        apt update && apt install socat -y
+        apt update && apt install socat sqlite3 -y
         ;;
     centos | almalinux | rocky | oracle)
-        yum -y update && yum -y install socat
+        yum -y update && yum -y install socat sqlite
         ;;
     fedora)
-        dnf -y update && dnf -y install socat
+        dnf -y update && dnf -y install socat sqlite
         ;;
     arch | manjaro | parch)
-        pacman -Sy --noconfirm socat
+        pacman -Sy --noconfirm socat sqlite
         ;;
     *)
         echo -e "${red}不支持的操作系统，请检查脚本并手动安装必要的软件包。${plain}\n"
@@ -748,10 +786,10 @@ ssl_cert_issue_IP() {
         ;;
     esac
     if [ $? -ne 0 ]; then
-        LOGE "安装 socat 失败，请检查日志"
+        LOGE "安装 socat/sqlite3 失败，请检查日志"
         exit 1
     else
-        LOGI "安装 socat 成功..."
+        LOGI "安装 socat/sqlite3 成功..."
     fi
 
     LOGD "******使用说明******"
@@ -845,6 +883,7 @@ ssl_cert_issue_IP() {
         LOGI "自动续期设置成功，证书详情："
         ls -lah /root/cert/${serverIP}
         chmod 755 $certPath/*
+        apply_ip_cert_to_panel "${serverIP}"
     fi
 }
 
